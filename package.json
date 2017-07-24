@@ -1,0 +1,6 @@
+{
+  "dependencies": {
+    "chalk": "^2.0.1",
+    "execa": "^0.7.0"
+  }
+}

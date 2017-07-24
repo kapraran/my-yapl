@@ -1,0 +1,72 @@
+<!doctype html>
+<html>
+<head>
+    <title>sta</title>
+
+    <script src="vis.min.js"></script>
+
+    <style type="text/css">
+        body {
+            padding: 0;
+            margin: 0;
+        }
+
+        pre.code {
+            border: 1px solid #aaa;
+            background-color: #eee;
+            font-family: monospace;
+            margin: 10px;
+            padding: 10px;
+        }
+
+        #mynetwork {
+            width: 1400px;
+            height: 700px;
+            border: 1px solid lightgray;
+        }
+    </style>
+</head>
+<body>
+    <h1>
+        syntax abstract tree
+    </h1>
+
+    <pre class="code"><!--__SOURCE_CODE__--></pre>
+
+    <div id="mynetwork"></div>
+
+    <script type="text/javascript">
+        var __nodes = /**__NODES__**/0;
+        var __edges = /**__EDGES__**/0;
+
+        // create an array with nodes
+        var visNodes = new vis.DataSet(__nodes);
+
+        // create an array with edges
+        var visEdges = new vis.DataSet(__edges);
+
+        // create a network
+        var container = document.getElementById('mynetwork');
+        var data = {
+            nodes: visNodes,
+            edges: visEdges
+        };
+        var options = {
+            
+            layout: {
+                improvedLayout:true,
+                hierarchical: {
+                    sortMethod: 'directed',
+                    direction: 'UD'
+                }
+            },
+            edges: {
+                smooth: true,
+                arrows: {to : true }
+            }
+        };
+
+        var network = new vis.Network(container, data, options);
+    </script>
+</body>
+</html>

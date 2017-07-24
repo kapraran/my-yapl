@@ -1,0 +1,37 @@
+// Hey, this is a comment
+
+int add(int a1, int a2) {
+    return a1 + a2;
+}
+
+int sub(int v1, int v2) {
+
+}
+
+int main() {
+    int a, b, c;
+
+    while (true) {
+        break;
+        break; // TODO maybe should error
+    }
+
+    if (true) if (true) if (a) {
+        b = c;
+    } else if (c) while(true) return false; else {
+        a = c;
+    } else {
+        b = 3;
+        c = 7;
+        a = b + c;
+        if (a) {
+            b = 2;
+        } else c = 2;
+        //} else break;
+        
+        while(b) {
+            a = 2;
+            break;
+        }
+    } else a = 5;
+}
