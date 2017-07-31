@@ -1,39 +1,69 @@
 <!doctype html>
 <html>
 <head>
-    <title>sta</title>
+    <title>abstract syntax tree</title>
 
     <script src="vis.min.js"></script>
 
     <style type="text/css">
+        * {
+            box-sizing: border-box;
+        }
+
         body {
             padding: 0;
             margin: 0;
         }
 
-        pre.code {
-            border: 1px solid #aaa;
-            background-color: #eee;
-            font-family: monospace;
-            margin: 10px;
-            padding: 10px;
+        #app {
+            position: fixed;
+            z-index: 10;
+            top: 0;
+            right: 0;
+            bottom: 0;
+            left: 0;
+            display: flex;
         }
 
-        #mynetwork {
-            width: 1400px;
-            height: 700px;
-            border: 1px solid lightgray;
+        pre.code {
+            background-color: #eee;
+            font-family: monospace;
+            padding: 40px 10px 10px;
+            width: 100%;
+            height: 100%;
+            margin: 0;
+            font-size: 17px;
+            overflow-x: auto;
+            overflow-y: auto;
+        }
+
+        #toggle-source-code {
+            position: fixed;
+            z-index: 20;
+            top: 10px;
+            left: 10px;
+        }
+
+        #source-code {
+            width: 20%;
+            min-width: 300px;
+            border-right: 1px solid lightgray;
+        }
+
+        #ast {
+            flex: 1;
         }
     </style>
 </head>
 <body>
-    <h1>
-        syntax abstract tree
-    </h1>
+    <div id="app">
+        <div id="source-code">
+            <pre class="code"><!--__SOURCE_CODE__--></pre>
+        </div>
+        <div id="ast"></div>
+    </div>
 
-    <pre class="code"><!--__SOURCE_CODE__--></pre>
-
-    <div id="mynetwork"></div>
+    <button id="toggle-source-code">Hide source code</button>
 
     <script type="text/javascript">
         var __nodes = /**__NODES__**/0;
@@ -46,7 +76,7 @@
         var visEdges = new vis.DataSet(__edges);
 
         // create a network
-        var container = document.getElementById('mynetwork');
+        var container = document.getElementById('ast');
         var data = {
             nodes: visNodes,
             edges: visEdges
@@ -67,6 +97,20 @@
         };
 
         var network = new vis.Network(container, data, options);
+
+        var $btn = document.querySelector('#toggle-source-code');
+        $btn.onclick = function(e) {
+            var $sc = document.querySelector('#source-code');
+
+            if ($sc.style.display == 'none') {
+                $sc.style.display = 'block';
+                $btn.innerHTML = 'Hide source code';
+            } else {
+                $sc.style.display = 'none';
+                $btn.innerHTML = 'Show source code';
+            }
+               
+        }
     </script>
 </body>
 </html>

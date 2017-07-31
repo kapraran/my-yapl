@@ -120,17 +120,32 @@ function createVisualization(output) {
 
     var null_id = 100000;
 
-    output.replace(/\{viz\} (\d+)\:(\d+)\{(.*)\}\:(\d+)\:(.*)/g, function(line, _id, type, tmp, children_len, children_str) {
+    output.replace(/\{viz\} (\d+)\:(\d+)\{(.*)\}\:(\d+)\:(.*)/g, function(line, _id, type, contents, children_len, children_str) {
         if (!parseInt(_id) == 0) {
-            var _label = find_constant_by_value(constants, parseInt(type))[0];
-
-            if (tmp.trim().length > 0)
-                _label += '::' + tmp.trim();
-
-            nodes.push({
+            var node = {
                 id: parseInt(_id),
-                label: _label
-            });
+                label: find_constant_by_value(constants, parseInt(type))[0]
+            };
+
+            if (node.label.match(/^SYM_/)) {
+                if (node.label == 'SYM_TYPE_INTEGER') {
+                    node.label = ': int';
+                } else if (node.label == 'SYM_VARIABLE') {
+                    node.label = '$ ' + contents.trim();
+                } else if (node.label == 'SYM_METHOD') {
+                    node.label = '() ' + contents.trim();
+                } else if (node.label == 'SYM_CNST_INTEGER') {
+                    node.label = contents.trim();
+                } else if (contents.trim().length > 0)
+                    node.label += '::' + contents.trim();
+
+                node.color = {
+                    // border: '#0a5a72'
+                    background: '#caddf7'
+                }
+            }
+
+            nodes.push(node);
         }
 
         var children = children_str.replace(/\s+/g, ' ').trim().split(' ');

@@ -1,4 +1,13 @@
+int method1(int a, int b) {
+    return a+b+2;
+}
+
+int method2() {
+    int b;
+    b = 2 + 3;
+    return 2;
+}
+
 int main() {
-    int a = 2-1;
-    return a;
+    return method1(2+3, 3);
 }

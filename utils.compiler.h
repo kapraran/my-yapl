@@ -150,8 +150,10 @@ void ast_node_debug(ast_node *node, char rec) {
         printf("[yacc] > (symbol) ch: %d type: $%d\n", node->children_len, node->symb->type);
         
         if (rec) {
-            char str[81];
-            printf("[yacc] > {viz} %d:%d{%s}:%d:", node->id, node->symb->type, node->symb->name, node->children_len);
+            if (node->symb->type == SYM_CNST_INTEGER)
+                printf("[yacc] > {viz} %d:%d{%d}:%d:", node->id, node->symb->type, node->symb->ivalue, node->children_len);
+            else
+                printf("[yacc] > {viz} %d:%d{%s}:%d:", node->id, node->symb->type, node->symb->name, node->children_len);
         }
     } else {
         printf("[yacc] > (element) ch: %d type: $%d\n", node->children_len, node->element_type);

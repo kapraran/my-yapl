@@ -49,7 +49,7 @@ YYSTYPE yylval;
 "=="                        { return _match(yytext, T_EQEQ); }
 "!="                        { return _match(yytext, T_NEQ); }
 
-(\-?[1-9][0-9]*|0)          { yylval.yint=atoi(yytext); return _match(yytext, T_NUM); }
+([1-9][0-9]*|0)          { yylval.yint=atoi(yytext); return _match(yytext, T_NUM); }
 [A-Za-z]([A-Za-z]|[0-9]|_)* { strcpy(yylval.ystr, yytext); return _match(yytext, T_ID); }
 
 "//".*                      { ; }

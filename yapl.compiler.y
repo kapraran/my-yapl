@@ -2,6 +2,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include "utils.compiler.h"
+#include "generator.h"
 
 extern int yylex();
 extern int yyparse();
@@ -198,6 +199,7 @@ nMulop      : '*'                                   { $$ = EL_MULT; }
 nFactor     : '(' nExpr ')'                         { $$ = $2; }
             | nLocation                             { $$ = $1; }
             | T_NUM                                 { $$ = ast_node_new_symbol(symbol_new_integer($1)); }
+            | '-' T_NUM                             { $$ = ast_node_new_symbol(symbol_new_integer(-$2)); }
             | T_TRUE                                { $$ = ast_node_new_symbol(symbol_new_integer(1)); }
             | T_FALSE                               { $$ = ast_node_new_symbol(symbol_new_integer(0)); }
             | nMethod '(' nActuals ')'              { $$ = h_nFactor_method_call($1, $3); } // TODO
@@ -442,6 +444,8 @@ int main(void) {
     stack_node_debug(symb_table, TRUE);
     
     // ast_node_free(root); // fails
+
+    generate_mixal(root);
 
     return 0;
 }
