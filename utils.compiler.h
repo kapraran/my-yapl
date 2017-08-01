@@ -31,12 +31,12 @@
 #define EL_SUB      '-'
 #define EL_MULT     '*'
 #define EL_DIV      '/'
-#define EL_LEQT     T_LEQT
-#define EL_LT       T_LT
-#define EL_GT       T_GT
-#define EL_GEQT     T_GEQT
-#define EL_EQEQ     T_EQEQ
-#define EL_NEQ      T_NEQ
+#define EL_LEQT     1017
+#define EL_LT       1018
+#define EL_GT       1019
+#define EL_GEQT     1020
+#define EL_EQEQ     1021
+#define EL_NEQ      1022
 
 #define SYM_TYPE_INTEGER    2000
 #define SYM_CNST_INTEGER    2001
