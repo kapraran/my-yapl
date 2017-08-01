@@ -2,10 +2,6 @@ int method1(int a, int b) {
     return a+b+2;
 }
 
-int method2() {
-    return 1 + 2 * 3 * 4 - 5 + 7 * 8 + 4 - 6 * 2 * 7 - 24;
-}
-
 int main() {
     return method1(2+3, 3);
 }

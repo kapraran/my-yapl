@@ -1,12 +1,28 @@
 var execa = require('execa');
 var chalk = require('chalk');
 var fs = require('fs');
+var program = require('commander');
 
-if (process.argv.indexOf('-ns') > -1)
+program
+    .version('0.2.0')
+    .option('-n, --nostyles', 'Disable styles')
+    .option('-r, --run', 'Run compiler after compilation')
+    .option('-v, --visualize', 'Visualize Abstract Syntax Tree')
+    .option('-i, --input <filename>', 'Set input filename')
+    .option('-o, --output <filename>', 'Set output filename')
+    .option('-b, --builder', 'Run mixal builder (requires -r)')
+    .parse(process.argv);
+
+if (program.nostyles)
     chalk.enabled = false;
 
 var TAB = '  ';
 var PREFIX = TAB + chalk.gray('>') + TAB.substr(1);
+
+function getInputFilename() {
+    var filename = program.input ? program.input: 'examples/example.yapl';
+    return './' + filename;
+}
 
 function displayResult(name, started, res) {
     var ms = Date.now() - started;
@@ -50,7 +66,7 @@ function onYaccCompleted(started, res) {
 function onFlexCompleted(started, res) {
     displayResult('flex', started, res);
 
-    return execa('gcc', ['lex.yy.c', 'y.tab.c', '-o', 'yapl']);
+    return execa('gcc', ['lex.yy.c', 'y.tab.c', '-o', 'yaplc']);
 }
 
 function find_constant_by_name(constants, name) {
@@ -159,7 +175,7 @@ function createVisualization(output) {
         return line;
     });
 
-    var src = fs.readFileSync('./example_1.txt');
+    var src = fs.readFileSync(getInputFilename());
     var tpl = fs.readFileSync('./ast.template.html', 'utf8');
     var rendered = tpl
         .replace('<!--__SOURCE_CODE__-->', src)                 // replace source code
@@ -197,15 +213,13 @@ function onGccCompleted(started, res) {
     
     console.log(chalk.black.bgGreen('\n ✔ build completed '));
 
-    if (process.argv.indexOf('-r') > -1) {
-
-        // console.log(chalk.black.bgWhite('\n   running yapl '));
+    if (program.run) {
         process.stdout.write(chalk.black.bgWhite('\n   running yapl '));
         
-        var fstream = fs.createReadStream('./example_1.txt');
+        var fstream = fs.createReadStream(getInputFilename());
         fstream.on('open', function() {
             
-            var proc = execa('yapl', [], {
+            var proc = execa('yaplc', [], {
                 // stdout: process.stdout,
                 // stderr: process.stderr
             });
@@ -214,10 +228,14 @@ function onGccCompleted(started, res) {
                 .then(function(res) {
                     console.log(chalk.black.bgGreen(' ✔ '));
 
-                    if (process.argv.indexOf('-v') > -1)
+                    if (program.visualize)
                         createVisualization(res.stdout);
 
                     beautifyYaplOutput(res.stdout);
+
+                    // run mix builder
+                    if (program.builder)
+                        execa('./bin/MIXBuilder.exe', ['./compiled.mix']);
                 })
                 .catch(function(err) {
                     console.log(chalk.black.bgRed(' ✖ '));

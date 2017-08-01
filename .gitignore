@@ -1,9 +1,10 @@
 /.vscode
 /node_modules
 a.exe
-yapl.exe
+yaplc.exe
 ast.html
 desktop.ini
 lex.yy.c
 y.tab.c
 y.tab.h
+compiled.mix

@@ -1,6 +1,7 @@
 #ifndef GENERATOR_H
 #define GENERATOR_H
 
+#include <stdio.h>
 #include <ctype.h>
 #include "utils.compiler.h"
 
@@ -8,16 +9,57 @@ typedef struct __loc {
     char label[128];
     char operation[16];
     char memory[128];
+
+    struct __loc *next;
+    struct __loc *prev;
 } t_loc;
+
+t_loc *loc_first = NULL;
+t_loc *loc_last = NULL;
+
+t_loc *loc_alloc(char *label, char *operation, char *memory) {
+    t_loc *loc = (t_loc*) malloc(sizeof(t_loc));
+
+    strcpy(loc->label, label);
+    strcpy(loc->operation, operation);
+    strcpy(loc->memory, memory);
+
+    loc->next = NULL;
+    loc->prev = NULL;
+
+    return loc;
+}
+
+void loc_append(t_loc *loc) {
+    if (loc_last == NULL) {
+        loc_first = loc;
+        loc_last = loc;
+    } else {
+        loc_last->next = loc;
+        loc->prev = loc_last;
+        loc_last = loc;
+    }
+}
+
+void loc_free(t_loc *loc, char others) {
+    if (others) {
+        loc_free(loc->prev, others);
+        loc_free(loc->next, others);
+    }
+
+    free(loc);
+}
 
 const char *ARGS_STACK_str = "ARSTACK";
 const char *EXPR_STACK_str = "EXSTACK";
 
 int mx_curr_method = 0;
 char mx_curr_method_str[128];
-int mx_curr_tmp_label = 0;
-char mx_curr_tmp_label_str[128];
+int mx_curr_label = 0;
+char mx_curr_label_str[128];
 int mx_curr_while_id = -1;
+
+FILE *mx_file = NULL;
 
 void generate(ast_node *node);
 
@@ -26,7 +68,13 @@ void mx_comment(const char *comment) {
 }
 
 void mx_com(const char *label, const char *op, const char *mem) {
-    printf("%s\t%s\t%s\n", label, op, mem); // TODO replace with file
+    printf("%s\t%s\t%s\n", label, op, mem);
+    
+    // write to file
+    if (mx_file == NULL)
+        mx_file = fopen("compiled.mix", "w");
+
+    fprintf(mx_file, "%s\t%s\t%s\n", label, op, mem);
 }
 
 void mx_com_lo(char *label, char *op) {
@@ -59,13 +107,13 @@ int mx_util_uniq_uc(char *str, char *uc_str) {
 void mx_util_method_var(char *name, char *str) {
     char uc_name[128];
     int code = mx_util_uniq_uc(name, uc_name);
-    sprintf(str, "%c%d%d%c%d", uc_name[0], strlen(name) % 100, code % 1000, 'V', mx_curr_method % 1000);
+    sprintf(str, "%c%d%c%d%d", 'V', mx_curr_method % 1000, uc_name[0], strlen(name) % 100, code % 1000);
 }
 
 void mx_util_method(char *name, char *str) {
     char uc_name[128];    
     int code = mx_util_uniq_uc(name, uc_name);
-    sprintf(str, "%c%d%d%c", uc_name[0], strlen(name) % 1000, code % 10000, 'M');
+    sprintf(str, "%c%c%d%d", 'M', uc_name[0], strlen(name) % 1000, code % 10000);
 }
 
 void mx_util_method_exit(char *name, char *str) {
@@ -90,17 +138,17 @@ void mx_util_mem_li(const char *label, int i, char *str) {
 }
 
 void mx_util_next_tmp_label(char def) {
-    mx_curr_tmp_label++;
-    sprintf(mx_curr_tmp_label_str, "LBL%d", mx_curr_tmp_label);
+    mx_curr_label++;
+    sprintf(mx_curr_label_str, "LBL%d", mx_curr_label);
     
     if (def)
-        mx_com(mx_curr_tmp_label_str, "CON", "0");
+        mx_com(mx_curr_label_str, "CON", "0");
 }
 
 void mx_util_symbol(symbol *symb, char *str) {
     if (symb->type == SYM_CNST_INTEGER) {
         sprintf(str, "=%d=", symb->ivalue);
-    } else if(symb->type == SYM_VARIABLE) {
+    } else if (symb->type == SYM_VARIABLE) {
         mx_util_method_var(symb->name, str);
     }
 }
@@ -114,21 +162,21 @@ char mx_gen_op(int op, char *symb) {
 
         mx_util_next_tmp_label(FALSE);
         if (op == EL_LEQT) {
-            mx_com_om("JLE", mx_curr_tmp_label_str);
+            mx_com_om("JLE", mx_curr_label_str);
         } else if (op == EL_LT) {
-            mx_com_om("JL", mx_curr_tmp_label_str);
+            mx_com_om("JL", mx_curr_label_str);
         } else if (op == EL_GT) {
-            mx_com_om("JG", mx_curr_tmp_label_str);
+            mx_com_om("JG", mx_curr_label_str);
         } else if (op == EL_GEQT) {
-            mx_com_om("JGE", mx_curr_tmp_label_str);
+            mx_com_om("JGE", mx_curr_label_str);
         } else if (op == EL_EQEQ) {
-            mx_com_om("JE", mx_curr_tmp_label_str);
+            mx_com_om("JE", mx_curr_label_str);
         } else if (op == EL_NEQ) {
-            mx_com_om("JNE", mx_curr_tmp_label_str);
+            mx_com_om("JNE", mx_curr_label_str);
         }
 
         mx_com_om("LDA", "=0=");
-        mx_com_lo(mx_curr_tmp_label_str, "NOP");
+        mx_com_lo(mx_curr_label_str, "NOP");
     } else if (op == EL_ADD) {
         mx_com_om("ADD", symb);
     } else if (op == EL_SUB) {
@@ -193,6 +241,8 @@ void mx_gen_declare(ast_node *left, ast_node *right, char *tmp_str) {
         mx_util_mem_li(EXPR_STACK_str, 5, tmp_str);
         mx_com_om("LDA", tmp_str);
         mx_com_om("STA", var_name);
+    } else if (right == NULL) {
+        mx_com(var_name, "CON", "0");
     }
 }
 
@@ -205,16 +255,16 @@ void generate(ast_node *node) {
     switch(node->element_type) {
         case EL_PROG:
             mx_com(ARGS_STACK_str, "EQU", "0");     // ri6
-            mx_com(EXPR_STACK_str, "EQU", "256");   // ri5
-            mx_com("PROG", "EQU", "1024");
-            mx_com_om("ORIG", "PROG");
+            mx_com(EXPR_STACK_str, "EQU", "128");   // ri5
+            mx_com("PROGRAM", "EQU", "512");
+            mx_com_om("ORIG", "PROGRAM");
             mx_util_method("main", tmp_str);
             mx_com_om("JMP", tmp_str);
             
             generate(node->children[0]);
             
             mx_com_o("HLT");
-            mx_com_om("END", "PROG");
+            mx_com_om("END", "PROGRAM");
             break;
 
         case EL_METHLIST:
@@ -423,7 +473,7 @@ void generate(ast_node *node) {
             ast_node *right = node->children[1];
 
             // optimization #1
-            if (left->is_symbol && right->is_symbol) { // TODO check if methods
+            if (left->is_symbol && right->is_symbol) {
                 mx_util_symbol(left->symb, tmp_str);
 
                 if (node->element_type != EL_DIV)
