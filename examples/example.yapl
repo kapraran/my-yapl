@@ -1,7 +1,20 @@
-int lol() {
-    return 2;
+int om() {
+    int a = 0;
+    int b = 148373543;
+    return a + b;
 }
 
 int main() {
-    return 1;
+    int a = 0, b;
+    while (a < 3) {
+        b = om();
+        
+        if (a > 300) {
+            break;
+        } else {
+            a = a+1;
+        }
+    }
+
+    return b;
 }

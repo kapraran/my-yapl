@@ -1,0 +1,17 @@
+int x() {
+    int a = 0;
+    int b = 148373543; // change
+    return a + b;
+}
+
+int main() {
+    int i = 0, b;
+    while (i < 3) {
+        b = x();
+
+        if (i > 300) break; 
+        else i = i+1;
+    }
+
+    return b;
+}

@@ -30,6 +30,18 @@ t_loc *loc_create(const char *label, const char *operation, const char *memory) 
     return loc;
 }
 
+void loc_free(t_loc *loc, char rec) {
+    if (loc == NULL)
+        return;
+
+    if (rec) {
+        loc_free(loc->prev, rec);
+        loc_free(loc->next, rec);
+    }
+
+    free(loc);
+}
+
 void loc_append(t_loc *loc) {
     if (loc_last == NULL) {
         loc_first = loc;
@@ -39,6 +51,13 @@ void loc_append(t_loc *loc) {
         loc->prev = loc_last;
         loc_last = loc;
     }
+}
+
+void loc_insert_after(t_loc *prev, t_loc *ins) {
+    // TODO check nulls...
+    ins->next = prev->next;
+    ins->prev = prev;
+    prev->next = ins;
 }
 
 t_loc *loc_peek(int index, char from_start) {
@@ -60,18 +79,6 @@ t_loc *loc_peek_end(int index) {
     return loc_peek(index, FALSE);
 }
 
-void loc_free(t_loc *loc, char rec) {
-    if (loc == NULL)
-        return;
-
-    if (rec) {
-        loc_free(loc->prev, rec);
-        loc_free(loc->next, rec);
-    }
-
-    free(loc);
-}
-
 char loc_remove(t_loc *loc) {
     if (loc == NULL)
         return FALSE;
@@ -90,14 +97,21 @@ char loc_remove(t_loc *loc) {
     return FALSE;
 }
 
-void loc_print() {
+void loc_print(char write_file) {
+    FILE *mxv_file = fopen("compiled.mix", "w");
+
     t_loc *curr = loc_first;
     while (curr != NULL) {
         printf("%s\t%s\t%s\n", curr->label, curr->operation, curr->memory);
+        if (write_file)
+            fprintf(mxv_file, "%s\t%s\t%s\n", curr->label, curr->operation, curr->memory);
         curr = curr->next;
     }
 }
 
+#define EXPR_STACK_START 128
+#define LVAR_START 512
+#define PROG_START 1024
 const char *ARGS_STACK_str = "ARSTACK";
 const char *EXPR_STACK_str = "EXSTACK";
 const char *PROG_LABEL_str = "PROGRAM";
@@ -112,8 +126,8 @@ int mxv_label = 0;
 char mxv_label_str[128];
 int mxv_while_id = -1;
 int mxv_optimized_lines = 0;
-
-FILE *mxv_file = NULL;
+int mxv_lvar_pos = LVAR_START;
+t_loc *mxv_lvar_last = NULL;
 
 void generate(ast_node *node);
 
@@ -125,12 +139,6 @@ void mxc(const char *label, const char *op, const char *mem) {
     // printf("%s\t%s\t%s\n", label, op, mem);
 
     loc_append(loc_create(label, op, mem));
-    
-    // write to file
-    if (mxv_file == NULL)
-        mxv_file = fopen("compiled.mix", "w");
-
-    fprintf(mxv_file, "%s\t%s\t%s\n", label, op, mem);
 }
 
 void mxc_lo(const char *label, const char *op) {
@@ -186,7 +194,7 @@ void mxu_next_label(const char def) {
     sprintf(mxv_label_str, "LBL%d", mxv_label);
 
     if (def)
-        mxc(mxv_label_str, "CON", "0");
+        mxc_lo(mxv_label_str, "NOP");
 }
 
 void mxu_symbol(symbol *symb, char *str) {
@@ -260,33 +268,40 @@ void mxg_stack_op(int op) {
     mxc_om("INC5", "1");
 }
 
+/** special **/
+void mxg_define_var(char *name) {
+    char tmp_str[128];
+    sprintf(tmp_str, "%d", mxv_lvar_pos);
+    t_loc *loc = loc_create(name, "EQU", tmp_str);
+    loc_insert_after(mxv_lvar_last, loc);
+    mxv_lvar_pos++;
+    mxv_lvar_last = loc;
+}
+
 void mxg_declare(ast_node *left, ast_node *right, char *tmp_str) {
     char var_name[128];
     mxu_var(left->symb->name, var_name);
+    mxg_define_var(var_name);
 
     if (right != NULL && right->is_symbol) {
         symbol *symb = right->symb;
 
         if (symb->type == SYM_CONSTANT_INT) {
-            sprintf(tmp_str, "%d", symb->ivalue);
-            mxc(var_name, "CON", tmp_str);
+            sprintf(tmp_str, "=%d=", symb->ivalue);
+            mxc_om("LDA", tmp_str);
+            mxc_om("STA", var_name);
         } else {
-            mxc(var_name, "CON", "0");
             mxu_var(symb->name, tmp_str);
             mxc_om("LDA", tmp_str);
             mxc_om("STA", var_name);
         }
     } else if (right != NULL) {
-        mxc(var_name, "CON", "0");
-
         generate(right);
 
         mxc_om("DEC5", "1");
         mxu_mem_pos(EXPR_STACK_str, 5, tmp_str);
         mxc_om("LDA", tmp_str);
         mxc_om("STA", var_name);
-    } else if (right == NULL) {
-        mxc(var_name, "CON", "0");
     }
 }
 
@@ -308,9 +323,12 @@ void generate(ast_node *node) {
 
     switch(node->element_type) {
         case EL_PROG:
-            mxc(ARGS_STACK_str, "EQU", "0");     // ri6
-            mxc(EXPR_STACK_str, "EQU", "128");   // ri5
-            mxc(PROG_LABEL_str, "EQU", "512");
+            mxc(ARGS_STACK_str, "EQU", "0");
+            sprintf(tmp_str, "%d", EXPR_STACK_START);
+            mxc(EXPR_STACK_str, "EQU", tmp_str);
+            mxv_lvar_last = loc_last;
+            sprintf(tmp_str, "%d", PROG_START);
+            mxc(PROG_LABEL_str, "EQU", tmp_str);
             mxc_om("ORIG", PROG_LABEL_str);
             mxu_method("main", tmp_str);
             mxc_om("JMP", tmp_str);
@@ -348,7 +366,8 @@ void generate(ast_node *node) {
 
         case EL_PARAMS:
             mxu_var(node->children[2]->symb->name, tmp_str);
-            mxc(tmp_str, "CON", "0");
+            // mxc(tmp_str, "CON", "0");
+            mxg_define_var(tmp_str);
             mxc_om("DEC6", "1");
             mxu_mem_pos(ARGS_STACK_str, 6, tmp_str);
             mxc_om("LDA", tmp_str);
@@ -581,7 +600,7 @@ void generate(ast_node *node) {
 
 void generate_mixal(ast_node *root) {
     generate(root);
-    loc_print();
+    loc_print(TRUE);
     printf("> optimized lines = %d\n", mxv_optimized_lines);
 }
 
