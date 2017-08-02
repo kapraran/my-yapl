@@ -49,7 +49,7 @@ ast_node *h_nFactor_method_call(ast_node *method, ast_node *args) {
 
     // TODO type checking
 
-    return ast_node_new_ch2(EL_METHCALL, method, args);
+    return ast_node_new_ch2(EL_METH_EX, method, args);
 }
 
 ast_node *h_nAssign(ast_node *var, ast_node *val) {
@@ -105,7 +105,7 @@ nProgram    : nMethList                             { root = h_nProgram($1); }
             |                                       { root = NULL; }
             ;
 
-nMethList   : nMeth nMethList                       { $$ = ast_node_new_ch2(EL_METHLIST, $1, $2); }
+nMethList   : nMeth nMethList                       { $$ = ast_node_new_ch2(EL_METH_LS, $1, $2); }
             | nMeth                                 { $$ = $1; }
             ;
 
@@ -120,7 +120,7 @@ nFormals    : nFormals nType T_ID ','               { $$ = h_nParams($1, $2, $3)
             |                                       { $$ = NULL; }
             ;
 
-nType       : T_INT                                 { $$ = ast_node_new_symbol(symbol_new_type(SYM_TYPE_INTEGER)); }
+nType       : T_INT                                 { $$ = ast_node_new_symbol(symbol_new_type(SYM_TYPE_INT)); }
             ;
 
 nBody       : '{' nDecls nStmts '}'                 { $$ = h_nBody($2, $3); }

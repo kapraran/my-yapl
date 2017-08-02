@@ -1,0 +1,21 @@
+// Calculate fibonacci numbers
+int fibonacci(int how_many) {
+	int first, second;
+	int i=0;
+	int tmp;
+	first = 0;
+	second = 1;
+
+	while (i < how_many) {
+		i = i + 1;
+		tmp = first + second;
+		first = second;
+		second = tmp;
+	}
+
+	return 0;
+}
+
+int main() {
+	return fibonacci(30);
+}

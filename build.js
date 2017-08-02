@@ -144,13 +144,13 @@ function createVisualization(output) {
             };
 
             if (node.label.match(/^SYM_/)) {
-                if (node.label == 'SYM_TYPE_INTEGER') {
+                if (node.label == 'SYM_TYPE_INT') {
                     node.label = ': int';
                 } else if (node.label == 'SYM_VARIABLE') {
                     node.label = '$ ' + contents.trim();
                 } else if (node.label == 'SYM_METHOD') {
                     node.label = '() ' + contents.trim();
-                } else if (node.label == 'SYM_CNST_INTEGER') {
+                } else if (node.label == 'SYM_CONSTANT_INT') {
                     node.label = contents.trim();
                 } else if (contents.trim().length > 0)
                     node.label += '::' + contents.trim();

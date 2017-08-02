@@ -5,6 +5,11 @@
 #include <stdlib.h>
 #include <string.h>
 
+// typedef enum {
+//   TRUE = 0,
+//   FALSE = 1
+// } t_bool;
+
 #define FALSE 0
 #define TRUE  1
 #define MAX_CHILDREN 4
@@ -15,8 +20,8 @@
 #define EL_IF       1003
 #define EL_BLOCK    1004
 #define EL_METH     1005
-#define EL_METHCALL 1006
-#define EL_METHLIST 1007
+#define EL_METH_EX  1006
+#define EL_METH_LS  1007
 #define EL_BODY     1008
 #define EL_DECL     1009
 #define EL_STMT     1010
@@ -38,8 +43,8 @@
 #define EL_EQEQ     1021
 #define EL_NEQ      1022
 
-#define SYM_TYPE_INTEGER    2000
-#define SYM_CNST_INTEGER    2001
+#define SYM_TYPE_INT    2000
+#define SYM_CONSTANT_INT    2001
 #define SYM_VARIABLE        2002
 #define SYM_METHOD          2003
 
@@ -78,7 +83,7 @@ symbol *symbol_allocate() {
 symbol *symbol_new_integer(int value) {
     symbol *symb = symbol_allocate();
 
-    symb->type = SYM_CNST_INTEGER;
+    symb->type = SYM_CONSTANT_INT;
     symb->ivalue = value;
 
     return symb;
@@ -150,7 +155,7 @@ void ast_node_debug(ast_node *node, char rec) {
         printf("[yacc] > (symbol) ch: %d type: $%d\n", node->children_len, node->symb->type);
         
         if (rec) {
-            if (node->symb->type == SYM_CNST_INTEGER)
+            if (node->symb->type == SYM_CONSTANT_INT)
                 printf("[yacc] > {viz} %d:%d{%d}:%d:", node->id, node->symb->type, node->symb->ivalue, node->children_len);
             else
                 printf("[yacc] > {viz} %d:%d{%s}:%d:", node->id, node->symb->type, node->symb->name, node->children_len);

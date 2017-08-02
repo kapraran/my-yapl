@@ -17,7 +17,7 @@ typedef struct __loc {
 t_loc *loc_first = NULL;
 t_loc *loc_last = NULL;
 
-t_loc *loc_alloc(char *label, char *operation, char *memory) {
+t_loc *loc_create(const char *label, const char *operation, const char *memory) {
     t_loc *loc = (t_loc*) malloc(sizeof(t_loc));
 
     strcpy(loc->label, label);
@@ -41,208 +41,262 @@ void loc_append(t_loc *loc) {
     }
 }
 
-void loc_free(t_loc *loc, char others) {
-    if (others) {
-        loc_free(loc->prev, others);
-        loc_free(loc->next, others);
+t_loc *loc_peek(int index, char from_start) {
+    t_loc *curr = from_start ? loc_first: loc_last;
+    while(curr != NULL && index > -1) {
+        if (index == 0)
+            return curr;
+
+        index--;
+        curr = from_start ? curr->next: curr->prev;
+    }
+}
+
+t_loc *loc_peek_start(int index) {
+    return loc_peek(index, TRUE);
+}
+
+t_loc *loc_peek_end(int index) {
+    return loc_peek(index, FALSE);
+}
+
+void loc_free(t_loc *loc, char rec) {
+    if (loc == NULL)
+        return;
+
+    if (rec) {
+        loc_free(loc->prev, rec);
+        loc_free(loc->next, rec);
     }
 
     free(loc);
 }
 
-const char *ARGS_STACK_str = "ARSTACK";
-const char *EXPR_STACK_str = "EXSTACK";
+char loc_remove(t_loc *loc) {
+    if (loc == NULL)
+        return FALSE;
 
-int mx_curr_method = 0;
-char mx_curr_method_str[128];
-int mx_curr_label = 0;
-char mx_curr_label_str[128];
-int mx_curr_while_id = -1;
-
-FILE *mx_file = NULL;
-
-void generate(ast_node *node);
-
-void mx_comment(const char *comment) {
-    printf("** %s\n", comment);
-}
-
-void mx_com(const char *label, const char *op, const char *mem) {
-    printf("%s\t%s\t%s\n", label, op, mem);
+    if (loc->prev != NULL)
+        loc->prev->next = loc->next;
+    else
+        loc_first = loc->next;
     
-    // write to file
-    if (mx_file == NULL)
-        mx_file = fopen("compiled.mix", "w");
+    if (loc->next != NULL)
+        loc->next->prev = loc->prev;
+    else
+        loc_last = loc->prev;
 
-    fprintf(mx_file, "%s\t%s\t%s\n", label, op, mem);
+    loc_free(loc, FALSE);
+    return FALSE;
 }
 
-void mx_com_lo(char *label, char *op) {
-    mx_com(label, op, "");
-}
-
-void mx_com_om(char *op, char *mem) {
-    mx_com("", op, mem);
-}
-
-void mx_com_o(char *op) {
-    mx_com("", op, "");
-}
-
-int mx_util_uniq_uc(char *str, char *uc_str) {
-    strcpy(uc_str, str);
-    
-    int sum = 0, i;
-    char* c;
-    for (i=0; i<strlen(str); i++)
-        sum += str[i];
-
-    for(c=uc_str; *c=toupper(*c); ++c);
-    
-    sprintf(uc_str, "%s%d", uc_str, sum);
-
-    return sum;
-}
-
-void mx_util_method_var(char *name, char *str) {
-    char uc_name[128];
-    int code = mx_util_uniq_uc(name, uc_name);
-    sprintf(str, "%c%d%c%d%d", 'V', mx_curr_method % 1000, uc_name[0], strlen(name) % 100, code % 1000);
-}
-
-void mx_util_method(char *name, char *str) {
-    char uc_name[128];    
-    int code = mx_util_uniq_uc(name, uc_name);
-    sprintf(str, "%c%c%d%d", 'M', uc_name[0], strlen(name) % 1000, code % 10000);
-}
-
-void mx_util_method_exit(char *name, char *str) {
-    strcpy(str, name);
-    strcat(str, "X");
-}
-
-void mx_util_mem(const char *label, int i, int f, char *str) {
-    char convert[128];
-
-    strcpy(str, label);
-    sprintf(convert, ",%d(%d)", i, f);
-    strcat(str, convert);
-}
-
-void mx_util_mem_li(const char *label, int i, char *str) {
-    char convert[128];
-
-    strcpy(str, label);
-    sprintf(convert, ",%d", i);
-    strcat(str, convert);
-}
-
-void mx_util_next_tmp_label(char def) {
-    mx_curr_label++;
-    sprintf(mx_curr_label_str, "LBL%d", mx_curr_label);
-    
-    if (def)
-        mx_com(mx_curr_label_str, "CON", "0");
-}
-
-void mx_util_symbol(symbol *symb, char *str) {
-    if (symb->type == SYM_CNST_INTEGER) {
-        sprintf(str, "=%d=", symb->ivalue);
-    } else if (symb->type == SYM_VARIABLE) {
-        mx_util_method_var(symb->name, str);
+void loc_print() {
+    t_loc *curr = loc_first;
+    while (curr != NULL) {
+        printf("%s\t%s\t%s\n", curr->label, curr->operation, curr->memory);
+        curr = curr->next;
     }
 }
 
-char mx_gen_op(int op, char *symb) {
+const char *ARGS_STACK_str = "ARSTACK";
+const char *EXPR_STACK_str = "EXSTACK";
+const char *PROG_LABEL_str = "PROGRAM";
+const char *IF_ELSE_str = "IFE%d";
+const char *IF_EXIT_str = "IFX%d";
+const char *WHILE_str = "WHL%d";
+const char *WHILE_EXIT_str = "WHL%dX";
+
+int mxv_method = 0;
+char mxv_method_str[128];
+int mxv_label = 0;
+char mxv_label_str[128];
+int mxv_while_id = -1;
+int mxv_optimized_lines = 0;
+
+FILE *mxv_file = NULL;
+
+void generate(ast_node *node);
+
+// void mx_comment(const char *comment) {
+//     printf("** %s\n", comment);
+// }
+
+void mxc(const char *label, const char *op, const char *mem) {
+    // printf("%s\t%s\t%s\n", label, op, mem);
+
+    loc_append(loc_create(label, op, mem));
+    
+    // write to file
+    if (mxv_file == NULL)
+        mxv_file = fopen("compiled.mix", "w");
+
+    fprintf(mxv_file, "%s\t%s\t%s\n", label, op, mem);
+}
+
+void mxc_lo(const char *label, const char *op) {
+    mxc(label, op, "");
+}
+
+void mxc_om(const char *op, const char *mem) {
+    mxc("", op, mem);
+}
+
+void mxc_o(const char *op) {
+    mxc("", op, "");
+}
+
+void mxu_id_ucase(const char *str, char *uc_str) {
+    strcpy(uc_str, str);
+    char *c;
+    for(c=uc_str; *c=toupper(*c); ++c);
+}
+
+int mxu_id_hash(char *str) {
+    int n = 0, i;
+    for (i=0; i<strlen(str); i++)
+        n += str[i];
+
+    return n + n % (strlen(str) * 10);
+}
+
+void mxu_var(char *name, char *str) {
+    char uc_name[128];
+    mxu_id_ucase(name, uc_name);
+    int hash = mxu_id_hash(name);
+    sprintf(str, "%c%d%c%d%d", 'V', mxv_method % 1000, uc_name[0], strlen(name) % 100, hash % 1000);
+}
+
+void mxu_method(char *name, char *str) {
+    char uc_name[128];
+    mxu_id_ucase(name, uc_name);
+    int hash = mxu_id_hash(name);
+    sprintf(str, "%c%c%d%d", 'M', uc_name[0], strlen(name) % 1000, hash % 10000);
+}
+
+void mxu_method_exit(char *name, char *str) {
+    sprintf(str, "%sX", name);
+}
+
+void mxu_mem_pos(const char *label, int i, char *str) {
+    sprintf(str, "%s,%d", label, i);
+}
+
+void mxu_next_label(const char def) {
+    mxv_label++;
+    sprintf(mxv_label_str, "LBL%d", mxv_label);
+
+    if (def)
+        mxc(mxv_label_str, "CON", "0");
+}
+
+void mxu_symbol(symbol *symb, char *str) {
+    if (symb->type == SYM_CONSTANT_INT)
+        sprintf(str, "=%d=", symb->ivalue);
+    else if (symb->type == SYM_VARIABLE)
+        mxu_var(symb->name, str);
+}
+
+char mxg_op(int op, char *symb) {
     char sta = TRUE;
 
     if (op == EL_LEQT || op == EL_LT || op == EL_GT || op == EL_GEQT || op == EL_EQEQ || op == EL_NEQ) {
-        mx_com_om("CMPA", symb);
-        mx_com_om("LDA", "=1=");
+        mxc_om("CMPA", symb);
+        mxc_om("LDA", "=1=");
 
-        mx_util_next_tmp_label(FALSE);
+        mxu_next_label(FALSE);
         if (op == EL_LEQT) {
-            mx_com_om("JLE", mx_curr_label_str);
+            mxc_om("JLE", mxv_label_str);
         } else if (op == EL_LT) {
-            mx_com_om("JL", mx_curr_label_str);
+            mxc_om("JL", mxv_label_str);
         } else if (op == EL_GT) {
-            mx_com_om("JG", mx_curr_label_str);
+            mxc_om("JG", mxv_label_str);
         } else if (op == EL_GEQT) {
-            mx_com_om("JGE", mx_curr_label_str);
+            mxc_om("JGE", mxv_label_str);
         } else if (op == EL_EQEQ) {
-            mx_com_om("JE", mx_curr_label_str);
+            mxc_om("JE", mxv_label_str);
         } else if (op == EL_NEQ) {
-            mx_com_om("JNE", mx_curr_label_str);
+            mxc_om("JNE", mxv_label_str);
         }
 
-        mx_com_om("LDA", "=0=");
-        mx_com_lo(mx_curr_label_str, "NOP");
+        mxc_om("LDA", "=0=");
+        mxc_lo(mxv_label_str, "NOP");
     } else if (op == EL_ADD) {
-        mx_com_om("ADD", symb);
+        mxc_om("ADD", symb);
     } else if (op == EL_SUB) {
-        mx_com_om("SUB", symb);
+        mxc_om("SUB", symb);
     } else if (op == EL_MULT) {
-        mx_com_om("MUL", symb);
+        mxc_om("MUL", symb);
         sta = FALSE;
     } else if (op == EL_DIV) {
-        mx_com_om("ENTA", "0");
-        mx_com_om("DIV", symb);
+        mxc_om("ENTA", "0");
+        mxc_om("DIV", symb);
     }
 
     return sta;
 }
 
 // applys operator to the top 2 numbers of the stack
-void mx_gen_stack_op(int op) {
+void mxg_stack_op(int op) {
     char tmp_str[128];
     
-    mx_com_om("DEC5", "2");
-    mx_util_mem_li(EXPR_STACK_str, 5, tmp_str);
+    mxc_om("DEC5", "2");
+    mxu_mem_pos(EXPR_STACK_str, 5, tmp_str);
     
     if (op != EL_DIV)
-        mx_com_om("LDA", tmp_str);
+        mxc_om("LDA", tmp_str);
     else
-        mx_com_om("LDX", tmp_str);
+        mxc_om("LDX", tmp_str);
 
-    mx_com_om("INC5", "1");
+    mxc_om("INC5", "1");
 
-    char sta = mx_gen_op(op, tmp_str);
-    mx_com_om("DEC5", "1");
+    char sta = mxg_op(op, tmp_str);
+    mxc_om("DEC5", "1");
 
     // push result
     if (sta)
-        mx_com_om("STA", tmp_str);
+        mxc_om("STA", tmp_str);
     else
-        mx_com_om("STX", tmp_str);
-    mx_com_om("INC5", "1");
+        mxc_om("STX", tmp_str);
+    mxc_om("INC5", "1");
 }
 
-void mx_gen_declare(ast_node *left, ast_node *right, char *tmp_str) {
+void mxg_declare(ast_node *left, ast_node *right, char *tmp_str) {
     char var_name[128];
-
-    mx_util_method_var(left->symb->name, var_name);
+    mxu_var(left->symb->name, var_name);
 
     if (right != NULL && right->is_symbol) {
-        if (right->symb->type == SYM_CNST_INTEGER) {
-            sprintf(tmp_str, "%d", right->symb->ivalue);
-            mx_com(var_name, "CON", tmp_str);
+        symbol *symb = right->symb;
+
+        if (symb->type == SYM_CONSTANT_INT) {
+            sprintf(tmp_str, "%d", symb->ivalue);
+            mxc(var_name, "CON", tmp_str);
         } else {
-            mx_com(var_name, "CON", "0");
-            mx_util_method_var(right->symb->name, tmp_str);
-            mx_com_om("LDA", tmp_str);
-            mx_com_om("STA", var_name);
+            mxc(var_name, "CON", "0");
+            mxu_var(symb->name, tmp_str);
+            mxc_om("LDA", tmp_str);
+            mxc_om("STA", var_name);
         }
     } else if (right != NULL) {
-        mx_com(var_name, "CON", "0");
+        mxc(var_name, "CON", "0");
 
         generate(right);
 
-        mx_com_om("DEC5", "1");
-        mx_util_mem_li(EXPR_STACK_str, 5, tmp_str);
-        mx_com_om("LDA", tmp_str);
-        mx_com_om("STA", var_name);
+        mxc_om("DEC5", "1");
+        mxu_mem_pos(EXPR_STACK_str, 5, tmp_str);
+        mxc_om("LDA", tmp_str);
+        mxc_om("STA", var_name);
     } else if (right == NULL) {
-        mx_com(var_name, "CON", "0");
+        mxc(var_name, "CON", "0");
+    }
+}
+
+/*************************/
+/** mixal optimizations **/
+/*************************/
+void mxo_rem_ret_jmp(char *label) {
+    if (strcmp(loc_last->operation, "JMP") == 0 && strcmp(loc_last->memory, label) == 0) {
+        mxv_optimized_lines++;
+        loc_remove(loc_last);
     }
 }
 
@@ -254,101 +308,103 @@ void generate(ast_node *node) {
 
     switch(node->element_type) {
         case EL_PROG:
-            mx_com(ARGS_STACK_str, "EQU", "0");     // ri6
-            mx_com(EXPR_STACK_str, "EQU", "128");   // ri5
-            mx_com("PROGRAM", "EQU", "512");
-            mx_com_om("ORIG", "PROGRAM");
-            mx_util_method("main", tmp_str);
-            mx_com_om("JMP", tmp_str);
+            mxc(ARGS_STACK_str, "EQU", "0");     // ri6
+            mxc(EXPR_STACK_str, "EQU", "128");   // ri5
+            mxc(PROG_LABEL_str, "EQU", "512");
+            mxc_om("ORIG", PROG_LABEL_str);
+            mxu_method("main", tmp_str);
+            mxc_om("JMP", tmp_str);
             
             generate(node->children[0]);
             
-            mx_com_o("HLT");
-            mx_com_om("END", "PROGRAM");
+            mxc_o("HLT");
+            mxc_om("END", PROG_LABEL_str);
             break;
 
-        case EL_METHLIST:
+        case EL_METH_LS:
             generate(node->children[0]);
             generate(node->children[1]);
             break;
 
         case EL_METH:
-            mx_curr_method++;
+            mxv_method++;
             char mtname[128];
-            mx_util_method(node->children[1]->symb->name, mtname);
-            strcpy(mx_curr_method_str, mtname);
+            mxu_method(node->children[1]->symb->name, mtname);
+            strcpy(mxv_method_str, mtname);
 
-            mx_util_method_exit(mtname, tmp_str);
-            mx_com(mtname, "STJ", tmp_str);
+            mxu_method_exit(mtname, tmp_str);
+            mxc(mtname, "STJ", tmp_str);
             
             generate(node->children[2]);
             generate(node->children[3]);
 
-            if (strcmp(node->children[1]->symb->name, "main") != 0)
-                mx_com(tmp_str, "JMP", "*");
-            else
-                mx_com_lo(tmp_str, "NOP");
+            mxo_rem_ret_jmp(tmp_str);
+            if (strcmp(node->children[1]->symb->name, "main") != 0) {
+                mxc(tmp_str, "JMP", "*");
+            } else {
+                mxc_lo(tmp_str, "NOP");
+            }
             break;
 
         case EL_PARAMS:
-            mx_util_method_var(node->children[2]->symb->name, tmp_str);
-            mx_com(tmp_str, "CON", "0");
-            mx_com_om("DEC6", "1");
-            mx_util_mem_li(ARGS_STACK_str, 6, tmp_str);
-            mx_com_om("LDA", tmp_str);
-            mx_util_method_var(node->children[2]->symb->name, tmp_str);
-            mx_com_om("STA", tmp_str);
+            mxu_var(node->children[2]->symb->name, tmp_str);
+            mxc(tmp_str, "CON", "0");
+            mxc_om("DEC6", "1");
+            mxu_mem_pos(ARGS_STACK_str, 6, tmp_str);
+            mxc_om("LDA", tmp_str);
+            mxu_var(node->children[2]->symb->name, tmp_str);
+            mxc_om("STA", tmp_str);
 
             generate(node->children[0]);
             break;
-  
+
         case EL_BREAK:
-            sprintf(tmp_str, "WHL%dX", mx_curr_while_id);
-            mx_com_om("JMP", tmp_str);
+            sprintf(tmp_str, WHILE_EXIT_str, mxv_while_id);
+            mxc_om("JMP", tmp_str);
             break;
 
         case EL_WHILE:
         {
-            int prev_while_id = mx_curr_while_id;
-            mx_curr_while_id = node->id;
+            int prev_while_id = mxv_while_id;
+            mxv_while_id = node->id;
 
-            sprintf(tmp_str, "WHL%d", node->id);
-            mx_com_lo(tmp_str, "NOP");
+            sprintf(tmp_str, WHILE_str, node->id);
+            mxc_lo(tmp_str, "NOP");
 
             if (node->children[0]->is_symbol) {
-                mx_util_symbol(node->children[0]->symb, tmp_str);
+                mxu_symbol(node->children[0]->symb, tmp_str);
             } else {
                 generate(node->children[0]);
-                mx_com_om("DEC5", "1");
-                mx_util_mem_li(EXPR_STACK_str, 5, tmp_str);
+                mxc_om("DEC5", "1");
+                mxu_mem_pos(EXPR_STACK_str, 5, tmp_str);
             }
 
             // do the comparison
-            mx_com_om("LDA", tmp_str);
-            mx_com_om("CMPA", "=0=");
-            sprintf(tmp_str, "WHL%dX", node->id);
-            mx_com_om("JE", tmp_str);
+            mxc_om("LDA", tmp_str);
+            mxc_om("CMPA", "=0=");
+            sprintf(tmp_str, WHILE_EXIT_str, node->id);
+            mxc_om("JE", tmp_str);
 
             generate(node->children[1]);
 
-            sprintf(tmp_str, "WHL%d", node->id);
-            mx_com_om("JMP", tmp_str);
-            sprintf(tmp_str, "WHL%dX", node->id);
-            mx_com_lo(tmp_str, "NOP");
+            sprintf(tmp_str, WHILE_str, node->id);
+            mxc_om("JMP", tmp_str);
+            sprintf(tmp_str, WHILE_EXIT_str, node->id);
+            mxc_lo(tmp_str, "NOP");
 
-            mx_curr_while_id = prev_while_id;
+            mxv_while_id = prev_while_id;
 
             break;
         }
         
         case EL_DECL_ST:
             // ignores type...
-            mx_gen_declare(node->children[1], node->children[2], tmp_str);
+            mxg_declare(node->children[1], node->children[2], tmp_str);
             generate(node->children[3]);
             break;
 
         case EL_DECL:
-            mx_gen_declare(node->children[0], node->children[1], tmp_str);
+            mxg_declare(node->children[0], node->children[1], tmp_str);
             generate(node->children[2]);
             break;
 
@@ -359,16 +415,16 @@ void generate(ast_node *node) {
 
         case EL_ASSIGN:      
             if (node->children[1]->is_symbol) {
-                mx_util_symbol(node->children[1]->symb, tmp_str);
+                mxu_symbol(node->children[1]->symb, tmp_str);
             } else {
                 generate(node->children[1]);
-                mx_com_om("DEC5", "1");
-                mx_util_mem_li(EXPR_STACK_str, 5, tmp_str);
+                mxc_om("DEC5", "1");
+                mxu_mem_pos(EXPR_STACK_str, 5, tmp_str);
             }
 
-            mx_com_om("LDA", tmp_str);
-            mx_util_method_var(node->children[0]->symb->name, tmp_str);
-            mx_com_om("STA", tmp_str);
+            mxc_om("LDA", tmp_str);
+            mxu_var(node->children[0]->symb->name, tmp_str);
+            mxc_om("STA", tmp_str);
 
             break;
 
@@ -388,54 +444,54 @@ void generate(ast_node *node) {
 
         case EL_IF:
             if (node->children[0]->is_symbol) {
-                mx_util_symbol(node->children[0]->symb, tmp_str);
+                mxu_symbol(node->children[0]->symb, tmp_str);
             } else {
                 generate(node->children[0]);
-                mx_com_om("DEC5", "1");
-                mx_util_mem_li(EXPR_STACK_str, 5, tmp_str);
+                mxc_om("DEC5", "1");
+                mxu_mem_pos(EXPR_STACK_str, 5, tmp_str);
             }
 
             // do the comparison
-            mx_com_om("LDA", tmp_str);
-            mx_com_om("CMPA", "=0=");
-            sprintf(tmp_str, "ELIF%d", node->id);
-            mx_com_om("JE", tmp_str);
+            mxc_om("LDA", tmp_str);
+            mxc_om("CMPA", "=0=");
+            sprintf(tmp_str, IF_ELSE_str, node->id);
+            mxc_om("JE", tmp_str);
 
             generate(node->children[1]);
 
-            sprintf(tmp_str, "ENIF%d", node->id);
-            mx_com_om("JMP", tmp_str);
+            sprintf(tmp_str, IF_EXIT_str, node->id);
+            mxc_om("JMP", tmp_str);
 
-            sprintf(tmp_str, "ELIF%d", node->id);
-            mx_com_lo(tmp_str, "NOP");
+            sprintf(tmp_str, IF_ELSE_str, node->id);
+            mxc_lo(tmp_str, "NOP");
 
             generate(node->children[2]);
 
-            sprintf(tmp_str, "ENIF%d", node->id);
-            mx_com_lo(tmp_str, "NOP");
+            sprintf(tmp_str, IF_EXIT_str, node->id);
+            mxc_lo(tmp_str, "NOP");
 
             break;
         
         case EL_RETURN:
             if (node->children[0]->is_symbol) {
-                mx_util_symbol(node->children[0]->symb, tmp_str);
-                mx_com_om("LDA", tmp_str);
-                mx_util_mem_li(EXPR_STACK_str, 5, tmp_str);
-                mx_com_om("STA", tmp_str);
-                mx_com_om("INC5", "1");
+                mxu_symbol(node->children[0]->symb, tmp_str);
+                mxc_om("LDA", tmp_str);
+                mxu_mem_pos(EXPR_STACK_str, 5, tmp_str);
+                mxc_om("STA", tmp_str);
+                mxc_om("INC5", "1");
             } else {
                 generate(node->children[0]);
             }
             
-            mx_util_method_exit(mx_curr_method_str, tmp_str);
-            mx_com_om("JMP", tmp_str);
+            mxu_method_exit(mxv_method_str, tmp_str);
+            mxc_om("JMP", tmp_str);
 
             break;
 
-        case EL_METHCALL:
+        case EL_METH_EX:
             generate(node->children[1]);
-            mx_util_method(node->children[0]->symb->name, tmp_str);
-            mx_com_om("JMP", tmp_str);
+            mxu_method(node->children[0]->symb->name, tmp_str);
+            mxc_om("JMP", tmp_str);
             break;
 
         case EL_ARGS:
@@ -443,18 +499,18 @@ void generate(ast_node *node) {
 
             // check if arg is symbol or el
             if (node->children[1]->is_symbol) {
-                mx_util_symbol(node->children[1]->symb, tmp_str);
+                mxu_symbol(node->children[1]->symb, tmp_str);
             } else {
                 generate(node->children[1]);
 
-                mx_com_om("DEC5", "1");
-                mx_util_mem_li(EXPR_STACK_str, 5, tmp_str);
+                mxc_om("DEC5", "1");
+                mxu_mem_pos(EXPR_STACK_str, 5, tmp_str);
             }
 
-            mx_com_om("LDA", tmp_str);
-            mx_util_mem_li(ARGS_STACK_str, 6, tmp_str);
-            mx_com_om("STA", tmp_str);
-            mx_com_om("INC6", "1");
+            mxc_om("LDA", tmp_str);
+            mxu_mem_pos(ARGS_STACK_str, 6, tmp_str);
+            mxc_om("STA", tmp_str);
+            mxc_om("INC6", "1");
 
             break;
 
@@ -474,50 +530,46 @@ void generate(ast_node *node) {
 
             // optimization #1
             if (left->is_symbol && right->is_symbol) {
-                mx_util_symbol(left->symb, tmp_str);
+                mxu_symbol(left->symb, tmp_str);
 
-                if (node->element_type != EL_DIV)
-                    mx_com_om("LDA", tmp_str);
-                else
-                    mx_com_om("LDX", tmp_str);
+                char *mxop = node->element_type != EL_DIV ? "LDA": "LDX";
+                mxc_om(mxop, tmp_str);
 
-                mx_util_symbol(right->symb, tmp_str);
-                char sta = mx_gen_op(node->element_type, tmp_str);
-                mx_util_mem_li(EXPR_STACK_str, 5, tmp_str);
-                if (sta)
-                    mx_com_om("STA", tmp_str);
-                else
-                    mx_com_om("STX", tmp_str);
-                mx_com_om("INC5", "1");
-                
+                mxu_symbol(right->symb, tmp_str);
+                char sta = mxg_op(node->element_type, tmp_str);
+                char *reg = sta ? "STA": "STX";
+                mxu_mem_pos(EXPR_STACK_str, 5, tmp_str);
+                mxc_om(reg, tmp_str);
+                mxc_om("INC5", "1");
+
                 return;
             }
 
             if (left->is_symbol) {
-                mx_util_symbol(left->symb, tmp_str);
+                mxu_symbol(left->symb, tmp_str);
                 
                 // push to stack
-                mx_com_om("LDA", tmp_str);
-                mx_util_mem_li(EXPR_STACK_str, 5, tmp_str);
-                mx_com_om("STA", tmp_str);
-                mx_com_om("INC5", "1");
+                mxc_om("LDA", tmp_str);
+                mxu_mem_pos(EXPR_STACK_str, 5, tmp_str);
+                mxc_om("STA", tmp_str);
+                mxc_om("INC5", "1");
             } else {
                 generate(left);
             }
 
             if (right->is_symbol) {
-                mx_util_symbol(right->symb, tmp_str);
+                mxu_symbol(right->symb, tmp_str);
                 
                 // push to stack
-                mx_com_om("LDA", tmp_str);
-                mx_util_mem_li(EXPR_STACK_str, 5, tmp_str);
-                mx_com_om("STA", tmp_str);
-                mx_com_om("INC5", "1");
+                mxc_om("LDA", tmp_str);
+                mxu_mem_pos(EXPR_STACK_str, 5, tmp_str);
+                mxc_om("STA", tmp_str);
+                mxc_om("INC5", "1");
             } else {
                 generate(right);
             }
 
-            mx_gen_stack_op(node->element_type);
+            mxg_stack_op(node->element_type);
         
             break;
         }
@@ -529,6 +581,8 @@ void generate(ast_node *node) {
 
 void generate_mixal(ast_node *root) {
     generate(root);
+    loc_print();
+    printf("> optimized lines = %d\n", mxv_optimized_lines);
 }
 
 #endif
