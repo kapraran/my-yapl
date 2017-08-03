@@ -1,0 +1,18 @@
+int main() {
+    int a;
+    int s;
+    int d;
+    int f;
+    int x, y;
+    a = 1;
+    s = 1;
+    d = 1;
+    f = 1;
+    
+    // result 10
+    x = ((a+2*21+f+d)/(4-(2+4)+7))+d;
+    // result 100
+    y = (((a+2*21+f+d)/(4-(2+4)+7))+d)*(((a+2*21+f+d)/(4-(2+4)+7))+d);
+
+    return 0;
+}

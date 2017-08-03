@@ -87,7 +87,7 @@ char loc_remove(t_loc *loc) {
         loc->prev->next = loc->next;
     else
         loc_first = loc->next;
-    
+
     if (loc->next != NULL)
         loc->next->prev = loc->prev;
     else
@@ -109,9 +109,8 @@ void loc_print(char write_file) {
     }
 }
 
-#define EXPR_STACK_START 128
-#define LVAR_START 512
-#define PROG_START 1024
+#define EXPR_STACK_START 150
+#define PROG_START 800
 const char *ARGS_STACK_str = "ARSTACK";
 const char *EXPR_STACK_str = "EXSTACK";
 const char *PROG_LABEL_str = "PROGRAM";
@@ -126,18 +125,12 @@ int mxv_label = 0;
 char mxv_label_str[128];
 int mxv_while_id = -1;
 int mxv_optimized_lines = 0;
-int mxv_lvar_pos = LVAR_START;
+int mxv_lvar_pos = 0;
 t_loc *mxv_lvar_last = NULL;
 
 void generate(ast_node *node);
 
-// void mx_comment(const char *comment) {
-//     printf("** %s\n", comment);
-// }
-
 void mxc(const char *label, const char *op, const char *mem) {
-    // printf("%s\t%s\t%s\n", label, op, mem);
-
     loc_append(loc_create(label, op, mem));
 }
 
@@ -270,12 +263,11 @@ void mxg_stack_op(int op) {
 
 /** special **/
 void mxg_define_var(char *name) {
+    mxv_lvar_pos++;
     char tmp_str[128];
-    sprintf(tmp_str, "%d", mxv_lvar_pos);
+    sprintf(tmp_str, "%d", PROG_START-mxv_lvar_pos);
     t_loc *loc = loc_create(name, "EQU", tmp_str);
     loc_insert_after(mxv_lvar_last, loc);
-    mxv_lvar_pos++;
-    mxv_lvar_last = loc;
 }
 
 void mxg_declare(ast_node *left, ast_node *right, char *tmp_str) {
@@ -286,15 +278,13 @@ void mxg_declare(ast_node *left, ast_node *right, char *tmp_str) {
     if (right != NULL && right->is_symbol) {
         symbol *symb = right->symb;
 
-        if (symb->type == SYM_CONSTANT_INT) {
+        if (symb->type == SYM_CONSTANT_INT)
             sprintf(tmp_str, "=%d=", symb->ivalue);
-            mxc_om("LDA", tmp_str);
-            mxc_om("STA", var_name);
-        } else {
+        else
             mxu_var(symb->name, tmp_str);
-            mxc_om("LDA", tmp_str);
-            mxc_om("STA", var_name);
-        }
+
+        mxc_om("LDA", tmp_str);
+        mxc_om("STA", var_name);
     } else if (right != NULL) {
         generate(right);
 
@@ -308,11 +298,23 @@ void mxg_declare(ast_node *left, ast_node *right, char *tmp_str) {
 /*************************/
 /** mixal optimizations **/
 /*************************/
-void mxo_rem_ret_jmp(char *label) {
+char mxo_rem_ret_jmp(char *label) {
     if (strcmp(loc_last->operation, "JMP") == 0 && strcmp(loc_last->memory, label) == 0) {
         mxv_optimized_lines++;
         loc_remove(loc_last);
+        return TRUE;
     }
+
+    return FALSE;
+}
+
+char mxo_only_main(char *name) {
+    if (mxv_method == 1) {
+        loc_remove(loc_last);
+        mxv_optimized_lines += 2;
+        return TRUE;
+    }
+    return FALSE;
 }
 
 void generate(ast_node *node) {
@@ -332,10 +334,9 @@ void generate(ast_node *node) {
             mxc_om("ORIG", PROG_LABEL_str);
             mxu_method("main", tmp_str);
             mxc_om("JMP", tmp_str);
-            
+
             generate(node->children[0]);
-            
-            mxc_o("HLT");
+
             mxc_om("END", PROG_LABEL_str);
             break;
 
@@ -351,8 +352,10 @@ void generate(ast_node *node) {
             strcpy(mxv_method_str, mtname);
 
             mxu_method_exit(mtname, tmp_str);
-            mxc(mtname, "STJ", tmp_str);
-            
+            if (!mxo_only_main(mtname)) {
+                mxc(mtname, "STJ", tmp_str);
+            }
+
             generate(node->children[2]);
             generate(node->children[3]);
 
@@ -360,7 +363,7 @@ void generate(ast_node *node) {
             if (strcmp(node->children[1]->symb->name, "main") != 0) {
                 mxc(tmp_str, "JMP", "*");
             } else {
-                mxc_lo(tmp_str, "NOP");
+                mxc_lo(tmp_str, "HLT");
             }
             break;
 
@@ -589,7 +592,7 @@ void generate(ast_node *node) {
             }
 
             mxg_stack_op(node->element_type);
-        
+
             break;
         }
 
