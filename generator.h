@@ -111,13 +111,15 @@ void loc_print(char write_file) {
 
 #define EXPR_STACK_START 150
 #define PROG_START 800
+#define ARGS_STACK_ID 6
+#define EXPR_STACK_ID 5
 const char *ARGS_STACK_str = "ARSTACK";
 const char *EXPR_STACK_str = "EXSTACK";
 const char *PROG_LABEL_str = "PROGRAM";
-const char *IF_ELSE_str = "IFE%d";
-const char *IF_EXIT_str = "IFX%d";
-const char *WHILE_str = "WHL%d";
-const char *WHILE_EXIT_str = "WHL%dX";
+const char *IF_ELSE_str = "IF%dE";
+const char *IF_EXIT_str = "IF%dX";
+const char *WHILE_START_str = "WH%dS";
+const char *WHILE_EXIT_str = "WH%dX";
 
 int mxv_method = 0;
 char mxv_method_str[128];
@@ -157,10 +159,10 @@ int mxu_id_hash(char *str) {
     for (i=0; i<strlen(str); i++)
         n += str[i];
 
-    return n + n % (strlen(str) * 10);
+    return n + strlen(str) % str[0];
 }
 
-void mxu_var(char *name, char *str) {
+void mxu_var_name(char *name, char *str) {
     char uc_name[128];
     mxu_id_ucase(name, uc_name);
     int hash = mxu_id_hash(name);
@@ -194,7 +196,7 @@ void mxu_symbol(symbol *symb, char *str) {
     if (symb->type == SYM_CONSTANT_INT)
         sprintf(str, "=%d=", symb->ivalue);
     else if (symb->type == SYM_VARIABLE)
-        mxu_var(symb->name, str);
+        mxu_var_name(symb->name, str);
 }
 
 char mxg_op(int op, char *symb) {
@@ -237,7 +239,7 @@ char mxg_op(int op, char *symb) {
 }
 
 // applys operator to the top 2 numbers of the stack
-void mxg_stack_op(int op) {
+void mxg_apply_op(int op) {
     char tmp_str[128];
     
     mxc_om("DEC5", "2");
@@ -261,36 +263,55 @@ void mxg_stack_op(int op) {
     mxc_om("INC5", "1");
 }
 
+void mxg_stack_push(const char stack, const char a_reg) {
+    char memory[128], inc[16];
+    const char *stack_str = stack == ARGS_STACK_ID ? ARGS_STACK_str: EXPR_STACK_str;
+    const char *reg = a_reg ? "STA": "STX";
+    mxu_mem_pos(stack_str, stack, memory);
+    mxc_om(reg, memory);
+    sprintf(inc, "INC%d", stack);
+    mxc_om(inc, "1");
+}
+
+void mxg_stack_pop(const char stack) {
+    char memory[128], dec[16];
+    const char *stack_str = stack == ARGS_STACK_ID ? ARGS_STACK_str: EXPR_STACK_str;
+    sprintf(dec, "DEC%d", stack);
+    mxc_om(dec, "1");
+    mxu_mem_pos(stack_str, stack, memory);
+    mxc_om("LDA", memory);
+}
+
 /** special **/
-void mxg_define_var(char *name) {
+void mxg_define_var(char *orig_name) {
     mxv_lvar_pos++;
-    char tmp_str[128];
-    sprintf(tmp_str, "%d", PROG_START-mxv_lvar_pos);
-    t_loc *loc = loc_create(name, "EQU", tmp_str);
+    char label[128], memory[128];
+    mxu_var_name(orig_name, label);
+    sprintf(memory, "%d", PROG_START-mxv_lvar_pos);
+    t_loc *loc = loc_create(label, "EQU", memory);
     loc_insert_after(mxv_lvar_last, loc);
 }
 
 void mxg_declare(ast_node *left, ast_node *right, char *tmp_str) {
     char var_name[128];
-    mxu_var(left->symb->name, var_name);
-    mxg_define_var(var_name);
+    mxg_define_var(left->symb->name);
+    mxu_var_name(left->symb->name, var_name);
 
     if (right != NULL && right->is_symbol) {
         symbol *symb = right->symb;
 
-        if (symb->type == SYM_CONSTANT_INT)
-            sprintf(tmp_str, "=%d=", symb->ivalue);
-        else
-            mxu_var(symb->name, tmp_str);
+        mxu_symbol(symb, tmp_str);
+
+        // if (symb->type == SYM_CONSTANT_INT)
+        //     sprintf(tmp_str, "=%d=", symb->ivalue);
+        // else
+        //     mxu_var_name(symb->name, tmp_str);
 
         mxc_om("LDA", tmp_str);
         mxc_om("STA", var_name);
     } else if (right != NULL) {
         generate(right);
-
-        mxc_om("DEC5", "1");
-        mxu_mem_pos(EXPR_STACK_str, 5, tmp_str);
-        mxc_om("LDA", tmp_str);
+        mxg_stack_pop(EXPR_STACK_ID);
         mxc_om("STA", var_name);
     }
 }
@@ -308,12 +329,13 @@ char mxo_rem_ret_jmp(char *label) {
     return FALSE;
 }
 
-char mxo_only_main(char *name) {
-    if (mxv_method == 1) {
+char mxo_only_main(char *orig_name) {
+    if (strcmp(orig_name, "main") == 0 && mxv_method == 1) {
         loc_remove(loc_last);
         mxv_optimized_lines += 2;
         return TRUE;
     }
+
     return FALSE;
 }
 
@@ -352,7 +374,7 @@ void generate(ast_node *node) {
             strcpy(mxv_method_str, mtname);
 
             mxu_method_exit(mtname, tmp_str);
-            if (!mxo_only_main(mtname)) {
+            if (!mxo_only_main(node->children[1]->symb->name)) {
                 mxc(mtname, "STJ", tmp_str);
             }
 
@@ -368,13 +390,9 @@ void generate(ast_node *node) {
             break;
 
         case EL_PARAMS:
-            mxu_var(node->children[2]->symb->name, tmp_str);
-            // mxc(tmp_str, "CON", "0");
-            mxg_define_var(tmp_str);
-            mxc_om("DEC6", "1");
-            mxu_mem_pos(ARGS_STACK_str, 6, tmp_str);
-            mxc_om("LDA", tmp_str);
-            mxu_var(node->children[2]->symb->name, tmp_str);
+            mxg_define_var(node->children[2]->symb->name);
+            mxg_stack_pop(ARGS_STACK_ID);
+            mxu_var_name(node->children[2]->symb->name, tmp_str);
             mxc_om("STA", tmp_str);
 
             generate(node->children[0]);
@@ -390,26 +408,24 @@ void generate(ast_node *node) {
             int prev_while_id = mxv_while_id;
             mxv_while_id = node->id;
 
-            sprintf(tmp_str, WHILE_str, node->id);
+            sprintf(tmp_str, WHILE_START_str, node->id);
             mxc_lo(tmp_str, "NOP");
 
             if (node->children[0]->is_symbol) {
                 mxu_symbol(node->children[0]->symb, tmp_str);
+                mxc_om("LDA", tmp_str);
             } else {
                 generate(node->children[0]);
-                mxc_om("DEC5", "1");
-                mxu_mem_pos(EXPR_STACK_str, 5, tmp_str);
+                mxg_stack_pop(EXPR_STACK_ID);
             }
 
-            // do the comparison
-            mxc_om("LDA", tmp_str);
             mxc_om("CMPA", "=0=");
             sprintf(tmp_str, WHILE_EXIT_str, node->id);
             mxc_om("JE", tmp_str);
 
             generate(node->children[1]);
 
-            sprintf(tmp_str, WHILE_str, node->id);
+            sprintf(tmp_str, WHILE_START_str, node->id);
             mxc_om("JMP", tmp_str);
             sprintf(tmp_str, WHILE_EXIT_str, node->id);
             mxc_lo(tmp_str, "NOP");
@@ -438,14 +454,13 @@ void generate(ast_node *node) {
         case EL_ASSIGN:      
             if (node->children[1]->is_symbol) {
                 mxu_symbol(node->children[1]->symb, tmp_str);
+                mxc_om("LDA", tmp_str);
             } else {
                 generate(node->children[1]);
-                mxc_om("DEC5", "1");
-                mxu_mem_pos(EXPR_STACK_str, 5, tmp_str);
+                mxg_stack_pop(EXPR_STACK_ID);
             }
 
-            mxc_om("LDA", tmp_str);
-            mxu_var(node->children[0]->symb->name, tmp_str);
+            mxu_var_name(node->children[0]->symb->name, tmp_str);
             mxc_om("STA", tmp_str);
 
             break;
@@ -467,14 +482,13 @@ void generate(ast_node *node) {
         case EL_IF:
             if (node->children[0]->is_symbol) {
                 mxu_symbol(node->children[0]->symb, tmp_str);
+                mxc_om("LDA", tmp_str);
             } else {
                 generate(node->children[0]);
-                mxc_om("DEC5", "1");
-                mxu_mem_pos(EXPR_STACK_str, 5, tmp_str);
+                mxg_stack_pop(EXPR_STACK_ID);
             }
 
             // do the comparison
-            mxc_om("LDA", tmp_str);
             mxc_om("CMPA", "=0=");
             sprintf(tmp_str, IF_ELSE_str, node->id);
             mxc_om("JE", tmp_str);
@@ -498,9 +512,7 @@ void generate(ast_node *node) {
             if (node->children[0]->is_symbol) {
                 mxu_symbol(node->children[0]->symb, tmp_str);
                 mxc_om("LDA", tmp_str);
-                mxu_mem_pos(EXPR_STACK_str, 5, tmp_str);
-                mxc_om("STA", tmp_str);
-                mxc_om("INC5", "1");
+                mxg_stack_push(EXPR_STACK_ID, TRUE);
             } else {
                 generate(node->children[0]);
             }
@@ -522,14 +534,13 @@ void generate(ast_node *node) {
             // check if arg is symbol or el
             if (node->children[1]->is_symbol) {
                 mxu_symbol(node->children[1]->symb, tmp_str);
+                mxc_om("LDA", tmp_str);
             } else {
                 generate(node->children[1]);
 
-                mxc_om("DEC5", "1");
-                mxu_mem_pos(EXPR_STACK_str, 5, tmp_str);
+                mxg_stack_pop(EXPR_STACK_ID);
             }
 
-            mxc_om("LDA", tmp_str);
             mxu_mem_pos(ARGS_STACK_str, 6, tmp_str);
             mxc_om("STA", tmp_str);
             mxc_om("INC6", "1");
@@ -560,9 +571,7 @@ void generate(ast_node *node) {
                 mxu_symbol(right->symb, tmp_str);
                 char sta = mxg_op(node->element_type, tmp_str);
                 char *reg = sta ? "STA": "STX";
-                mxu_mem_pos(EXPR_STACK_str, 5, tmp_str);
-                mxc_om(reg, tmp_str);
-                mxc_om("INC5", "1");
+                mxg_stack_push(EXPR_STACK_ID, sta);
 
                 return;
             }
@@ -572,26 +581,22 @@ void generate(ast_node *node) {
                 
                 // push to stack
                 mxc_om("LDA", tmp_str);
-                mxu_mem_pos(EXPR_STACK_str, 5, tmp_str);
-                mxc_om("STA", tmp_str);
-                mxc_om("INC5", "1");
+                mxg_stack_push(EXPR_STACK_ID, TRUE);
             } else {
                 generate(left);
             }
 
             if (right->is_symbol) {
                 mxu_symbol(right->symb, tmp_str);
-                
+
                 // push to stack
                 mxc_om("LDA", tmp_str);
-                mxu_mem_pos(EXPR_STACK_str, 5, tmp_str);
-                mxc_om("STA", tmp_str);
-                mxc_om("INC5", "1");
+                mxg_stack_push(EXPR_STACK_ID, TRUE);
             } else {
                 generate(right);
             }
 
-            mxg_stack_op(node->element_type);
+            mxg_apply_op(node->element_type);
 
             break;
         }

@@ -13,7 +13,7 @@ int fibonacci(int how_many) {
 		second = tmp;
 	}
 
-	return 0;
+	return 333;
 }
 
 int main() {

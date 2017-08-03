@@ -1,6 +1,9 @@
 TODO:
     ☐ check for overflow
+    ☐ remove methods after main
 
 Wishlist:
-    ☐ optimize... a lot
     ☐ use stack for local variables
+
+Optimizations:
+    ☐ optmize push/pops
