@@ -97,14 +97,15 @@ char loc_remove(t_loc *loc) {
     return FALSE;
 }
 
-void loc_print(char write_file) {
+void loc_write_file(char print) {
     FILE *mxv_file = fopen("compiled.mix", "w");
 
     t_loc *curr = loc_first;
     while (curr != NULL) {
-        printf("%s\t%s\t%s\n", curr->label, curr->operation, curr->memory);
-        if (write_file)
-            fprintf(mxv_file, "%s\t%s\t%s\n", curr->label, curr->operation, curr->memory);
+        if (print)
+            printf("%s\t%s\t%s\n", curr->label, curr->operation, curr->memory);
+
+        fprintf(mxv_file, "%s\t%s\t%s\n", curr->label, curr->operation, curr->memory);
         curr = curr->next;
     }
 }
@@ -116,6 +117,7 @@ void loc_print(char write_file) {
 const char *ARGS_STACK_str = "ARSTACK";
 const char *EXPR_STACK_str = "EXSTACK";
 const char *PROG_LABEL_str = "PROGRAM";
+const char *ERROR_LABEL_str = "ERROR";
 const char *IF_ELSE_str = "IF%dE";
 const char *IF_EXIT_str = "IF%dX";
 const char *WHILE_START_str = "WH%dS";
@@ -234,6 +236,8 @@ char mxg_op(int op, char *symb) {
         mxc_om("ENTA", "0");
         mxc_om("DIV", symb);
     }
+
+    mxc_om("JOV", ERROR_LABEL_str);
 
     return sta;
 }
@@ -359,6 +363,11 @@ void generate(ast_node *node) {
 
             generate(node->children[0]);
 
+            // mxc(ERROR_LABEL_str, "ENTA", "1");
+            mxc_lo(ERROR_LABEL_str, "NOP");
+            mxc_om("ENTA", "1");
+            mxc_o("HLT");
+
             mxc_om("END", PROG_LABEL_str);
             break;
 
@@ -385,7 +394,12 @@ void generate(ast_node *node) {
             if (strcmp(node->children[1]->symb->name, "main") != 0) {
                 mxc(tmp_str, "JMP", "*");
             } else {
-                mxc_lo(tmp_str, "HLT");
+                // mxc_lo(tmp_str, "HLT");
+                // mxc(tmp_str, "ENTA", "0");
+                // mxc_o("HLT");
+                mxc_lo(tmp_str, "NOP");
+                mxc_om("ENTA", "0");
+                mxc_o("HLT");
             }
             break;
 
@@ -434,7 +448,7 @@ void generate(ast_node *node) {
 
             break;
         }
-        
+
         case EL_DECL_ST:
             // ignores type...
             mxg_declare(node->children[1], node->children[2], tmp_str);
@@ -462,7 +476,6 @@ void generate(ast_node *node) {
 
             mxu_var_name(node->children[0]->symb->name, tmp_str);
             mxc_om("STA", tmp_str);
-
             break;
 
         case EL_BODY:
@@ -505,7 +518,6 @@ void generate(ast_node *node) {
 
             sprintf(tmp_str, IF_EXIT_str, node->id);
             mxc_lo(tmp_str, "NOP");
-
             break;
         
         case EL_RETURN:
@@ -519,7 +531,6 @@ void generate(ast_node *node) {
             
             mxu_method_exit(mxv_method_str, tmp_str);
             mxc_om("JMP", tmp_str);
-
             break;
 
         case EL_METH_EX:
@@ -544,7 +555,6 @@ void generate(ast_node *node) {
             mxu_mem_pos(ARGS_STACK_str, 6, tmp_str);
             mxc_om("STA", tmp_str);
             mxc_om("INC6", "1");
-
             break;
 
         case EL_LEQT:
@@ -578,8 +588,6 @@ void generate(ast_node *node) {
 
             if (left->is_symbol) {
                 mxu_symbol(left->symb, tmp_str);
-                
-                // push to stack
                 mxc_om("LDA", tmp_str);
                 mxg_stack_push(EXPR_STACK_ID, TRUE);
             } else {
@@ -588,8 +596,6 @@ void generate(ast_node *node) {
 
             if (right->is_symbol) {
                 mxu_symbol(right->symb, tmp_str);
-
-                // push to stack
                 mxc_om("LDA", tmp_str);
                 mxg_stack_push(EXPR_STACK_ID, TRUE);
             } else {
@@ -608,8 +614,9 @@ void generate(ast_node *node) {
 
 void generate_mixal(ast_node *root) {
     generate(root);
-    loc_print(TRUE);
-    printf("> optimized lines = %d\n", mxv_optimized_lines);
+    loc_write_file(FALSE);
+
+    // printf("> optimized lines = %d\n", mxv_optimized_lines);
 }
 
 #endif

@@ -1,31 +1,71 @@
-var execa = require('execa');
-var chalk = require('chalk');
-var fs = require('fs');
-var program = require('commander');
+#!/usr/bin/env node
 
-program
-    .version('0.2.0')
+const path = require('path');
+const fs = require('fs');
+const execa = require('execa');
+const chalk = require('chalk');
+// const u = require('./res/utils');
+const ConstManager = require('./res/const-manager');
+const app = require('commander');
+
+const pr = function(filename) {
+    return path.resolve(__dirname, filename);
+}
+
+const winBins = {
+    flex: './bin/flex.exe',
+    yacc: './bin/yacc.exe',
+    mixBuilder: './bin/MIXBuilder.exe'
+}
+
+const cm = new ConstManager([pr('y.tab.h'), pr('utils.compiler.h')])
+
+app
+    .version('0.3.0')
     .option('-n, --nostyles', 'Disable styles')
-    .option('-r, --run', 'Run compiler after compilation')
     .option('-v, --visualize', 'Visualize Abstract Syntax Tree')
+    .option('-r, --run', 'Run compiler after compilation')
     .option('-i, --input <filename>', 'Set input filename')
     .option('-o, --output <filename>', 'Set output filename')
     .option('-b, --builder', 'Run mixal builder (requires -r)')
     .parse(process.argv);
 
-if (program.nostyles)
+if (app.nostyles)
     chalk.enabled = false;
 
-var TAB = '  ';
-var PREFIX = TAB + chalk.gray('>') + TAB.substr(1);
+const TAB = '  ';
+const PREFIX = TAB + chalk.gray('>') + TAB.substr(1);
 
-function getInputFilename() {
-    var filename = program.input ? program.input: 'examples/example.yapl';
-    return './' + filename;
+const main = function() {
+
 }
 
-function displayResult(name, started, res) {
-    var ms = Date.now() - started;
+const getInputFilename = function() {
+    let filename = app.input ? app.input: 'examples/example.yapl';
+    return pr(filename)
+}
+
+const getCommand = function(name) {
+    if (isWindows())
+        return winBins[name];
+
+    if (isLinux())
+        return name;
+
+    return null;
+}
+
+const isWindows = function() {
+    return process.platform === 'win32';
+}
+
+const isLinux = function() {
+    return process.platform === 'linux';
+}
+
+const displayResult = function(name, started, res) {
+    let ms = Date.now() - started;
+
     if (res.failed)
         console.log(chalk.red('$ ' + name + ' ') + chalk.black.bgRed(' failed ') + chalk.red(' to complete'));
     else
@@ -42,95 +82,33 @@ function displayResult(name, started, res) {
     }
 }
 
-function editYTABH() {
-    var contents = fs.readFileSync('y.tab.h', 'utf8');
+const editYTABH = function() {
+    // load files
+    let template = fs.readFileSync(pr('./res/y.tab.h.tmpl'), 'utf8');
+    let ytabh = fs.readFileSync(pr('./y.tab.h'), 'utf8');
 
-    contents = '#ifndef YTAB_H\n#define YTAB_H\n\n' + contents + '\n#endif\n';
+    // replace contents
+    let contents = template.replace('/**__INSERT_CONTENT__**/', ytabh);
 
-    var index = contents.indexOf('typedef');
-    var firstPart = contents.substr(0, index);
-    var secondPart = contents.substr(index);
-    
-    contents = firstPart + '\ntypedef struct __ast_node ast_node;\n\n' + secondPart;
-
-    fs.writeFileSync('y.tab.h', contents, 'utf8');
+    // update y.tab.h
+    fs.writeFileSync(pr('./y.tab.h'), contents, 'utf8');
 }
 
-function onYaccCompleted(started, res) {
+const onYaccCompleted = function(started, res) {
     displayResult('yacc', started, res);
     editYTABH();
+    cm.load();
     
-    return execa('flex', ['yapl.compiler.l']);
+    return execa(getCommand('flex'), ['yapl.compiler.l']);
 }
 
-function onFlexCompleted(started, res) {
+const onFlexCompleted = function(started, res) {
     displayResult('flex', started, res);
 
-    return execa('gcc', ['lex.yy.c', 'y.tab.c', '-o', 'yaplc']);
-}
-
-function find_constant_by_name(constants, name) {
-    for (var i in constants) {
-        if (constants[i][0] == name)
-            return constants[i];
-    }
-    
-    return null;
-}
-
-function find_constant_by_value(constants, value) {
-    for (var i in constants) {
-        if (constants[i][1] == value)
-            return constants[i];
-    }
-
-    return null;
-}
-
-var __cache_constants = null;
-function loadConstants() {
-    if (__cache_constants != null)
-        return __cache_constants;
-
-    var files = ['y.tab.h', 'utils.compiler.h'];
-    var constants = [];
-    
-    for (var i in files) {
-        var pattern = /\#define\s+([a-zA-Z_]+)\s+(\d+|\'.\'|[a-zA-Z_]+)/g;
-        var file = files[i];
-        var content = fs.readFileSync(file, 'utf8');
-        var skip = ['FALSE', 'TRUE', 'MAX_CHILDREN'];
-
-        while ((found = pattern.exec(content))) {
-            if (skip.indexOf(found[1]) > -1)
-                continue;
-
-            var value = found[2];
-
-            if (value[0] == "'") {
-                value = value.charCodeAt(1);
-            } else if (isNaN(value)) {
-                value = find_constant_by_name(constants, value)[1];
-            } else {
-                value = parseInt(value);
-            }
-
-            var constant = [
-                found[1],
-                value
-            ];
-
-            constants.push(constant);
-        }
-    }
-
-    __cache_constants = constants;
-    return constants;
+    return execa('gcc', ['lex.yy.c', 'y.tab.c', '-o', 'build/yaplc']);
 }
 
 function createVisualization(output) {
-    var constants = loadConstants();
-
     var nodes = [];
     var edges = [];
 
@@ -140,7 +118,7 @@ function createVisualization(output) {
         if (!parseInt(_id) == 0) {
             var node = {
                 id: parseInt(_id),
-                label: find_constant_by_value(constants, parseInt(type))[0]
+                label: cm.findByValue(parseInt(type)).name
             };
 
             if (node.label.match(/^SYM_/)) {
@@ -176,33 +154,34 @@ function createVisualization(output) {
     });
 
     var src = fs.readFileSync(getInputFilename());
-    var tpl = fs.readFileSync('./ast.template.html', 'utf8');
+    var tpl = fs.readFileSync('./res/ast.html.tmpl', 'utf8');
     var rendered = tpl
         .replace('<!--__SOURCE_CODE__-->', src)                 // replace source code
         .replace('/**__NODES__**/0', JSON.stringify(nodes))     // replace nodes
         .replace('/**__EDGES__**/0', JSON.stringify(edges));    // replace edges
 
-    fs.writeFileSync('./ast.html', rendered, 'utf8');
+    fs.writeFileSync('./build/ast.html', rendered, 'utf8');
 }
 
-function beautifyYaplOutput(output) {
-    var constants = loadConstants();
-
-    output = output.replace(/\[lex\]/g, '[' + chalk.magenta('lex') + ']');
-    output = output.replace(/\[yacc\]/g, '[' + chalk.blue('yacc') + ']');
+const beautifyYaplOutput = function(output) {
+    output = output.replace(/\[lex\]/g, `[${chalk.magenta('lex')}]`);
+    output = output.replace(/\[yacc\]/g, `[${chalk.blue('yacc')}]`);
     
     output = output.replace(/\((epsilon|symbol|element)\)/g, function(match, str) {
-        if (str == 'epsilon') str = ' 💩 ';
+        // if (str == 'epsilon') str = ' 💩 ';
+        if (str == 'epsilon') str = ' ε ';
         else if (str == 'element') str = ' 💲 ';
         else str = ' 🗽 ';
         return ' ' + chalk.yellow(str) + '   >';
     });
     
     output = output.replace(/\$(\d+)/g, function(match, num) {
-        var inum = parseInt(num);
-        var constant = find_constant_by_value(constants, inum);
+        let inum = parseInt(num);
+        // let constant = findConstantByValue(constants, inum);
+        let constant = cm.findByValue(inum)
 
-        return match + ' {' + constant[0] + '}';
+        // return match + ' {' + constant[0] + '}';
+        return match + ' {' + constant.name + '}';
     });
     
     console.log(output);
@@ -211,15 +190,19 @@ function beautifyYaplOutput(output) {
 function onGccCompleted(started, res) {
     displayResult('gcc', started, res);
     
-    console.log(chalk.black.bgGreen('\n ✔ build completed '));
+    console.log('\n  ' + chalk.black.bgGreen(' ✔ build completed \n'));
 
-    if (program.run) {
-        process.stdout.write(chalk.black.bgWhite('\n   running yapl '));
+    if (app.run) {
+        process.stdout.write(chalk.black.bgWhite('\n   running yaplc '));
         
         var fstream = fs.createReadStream(getInputFilename());
         fstream.on('open', function() {
-            
-            var proc = execa('yaplc', [], {
+            var args = [];
+
+            if (app.visualize)
+                args.push('-v');
+
+            var proc = execa('./build/yaplc', args, {
                 // stdout: process.stdout,
                 // stderr: process.stderr
             });
@@ -228,17 +211,19 @@ function onGccCompleted(started, res) {
                 .then(function(res) {
                     console.log(chalk.black.bgGreen(' ✔ '));
 
-                    if (program.visualize)
+                    if (app.visualize)
                         createVisualization(res.stdout);
 
                     beautifyYaplOutput(res.stdout);
 
                     // run mix builder
-                    if (program.builder)
-                        execa('./bin/MIXBuilder.exe', ['./compiled.mix']);
+                    if (app.builder)
+                        execa(winBins.mixBuilder, ['./compiled.mix']);
                 })
                 .catch(function(err) {
                     console.log(chalk.black.bgRed(' ✖ '));
+
+                    console.error(err)
 
                     if (err.stdout)
                         beautifyYaplOutput(err.stdout);
@@ -289,24 +274,24 @@ function hasBeautifyFinished(output) {
 }
 
 function beautifyGccOutput(output) {
-    var contents = output;
+    let contents = output;
 
     process.stdout.write(PREFIX);
     while (!hasBeautifyFinished(contents)) {
-        var replacements = getReplacements();
-        var min = [contents.length + 1, null];
+        let replacements = getReplacements();
+        let min = [contents.length + 1, null];
 
-        for (var i in replacements) {
-            var index = contents.search(replacements[i][0]);
+        for (let i in replacements) {
+            let index = contents.search(replacements[i][0]);
 
             if (index < min[0] && index > -1)
                 min = [index, replacements[i]];
         }
 
-        var index = contents.search(min[1][0]);
-        var before = contents.substr(0, index);
-        var after = contents.substr(index);
-        var contents = after.replace(min[1][0], '');
+        let index = contents.search(min[1][0]);
+        let before = contents.substr(0, index);
+        let after = contents.substr(index);
+        let contents = after.replace(min[1][0], '');
 
         process.stdout.write(before + min[1][1](before, after));
     }
@@ -321,17 +306,17 @@ function onError(err) {
 }
 
 var t = Date.now();
-execa('yacc', ['-d', 'yapl.compiler.y'])
+execa(getCommand('yacc'), ['-d', 'yapl.compiler.y'])
     .then(function(r) {
-        var s=t;t=Date.now();
+        let s=t;t=Date.now();
         return onYaccCompleted(s, r);
     })
     .then(function(r) {
-        var s=t;t=Date.now();
+        let s=t;t=Date.now();
         return onFlexCompleted(s, r);
     })
     .then(function(r) {
-        var s=t;t=Date.now();
+        let s=t;t=Date.now();
         return onGccCompleted(s, r);
     })
     .catch(function(e) {

@@ -1,10 +1,23 @@
-/.vscode
-/node_modules
-a.exe
-yaplc.exe
-ast.html
-desktop.ini
+# directories
+build/*
+!build/empty
+
+# generated files
 lex.yy.c
 y.tab.c
 y.tab.h
+ast.html
 compiled.mix
+
+# compilation output
+a.exe
+yaplc.exe
+*.out
+
+# windows trash
+desktop.ini
+
+# misc
+/.vscode
+/node_modules
+yarn.lock

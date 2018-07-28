@@ -48,6 +48,12 @@
 #define SYM_VARIABLE        2002
 #define SYM_METHOD          2003
 
+#define DEBUG_NONE  0
+#define DEBUG_VIZ   1
+#define DEBUG_ALL   2
+
+int debug_level = DEBUG_ALL;
+
 // SYMBOL
 
 typedef struct __symbol {
@@ -144,7 +150,26 @@ typedef struct __ast_node {
     struct __ast_node *children[MAX_CHILDREN];
 } ast_node;
 
+int cmd_has(int argc, char *argv[], char *search) {
+    int i;
+    for (i=0; i<argc; i++)
+        if (strcmp(argv[i], search) == 0)
+            return TRUE;
+    return FALSE;
+}
+
+void debug_level_set(int level) {
+    debug_level = level;
+}
+
+int debug_level_get() {
+    return debug_level;
+}
+
 void ast_node_debug(ast_node *node, char rec) {
+    if (debug_level < DEBUG_VIZ)
+        return;
+
     if (node == NULL) {
         printf("[yacc] > (epsilon) .................\n");
         
@@ -211,7 +236,7 @@ ast_node *ast_node_new(int element_type, char children_len, ast_node *ch1, ast_n
     node->children[2] = ch3;
     node->children[3] = ch4;
 
-    ast_node_debug(node, FALSE);
+    // ast_node_debug(node, FALSE);
 
     return node;
 }
@@ -259,7 +284,7 @@ ast_node *ast_node_new_symbol(symbol *symb) {
     node->is_symbol = TRUE;
     node->symb = symb;
 
-    ast_node_debug(node, FALSE);
+    // ast_node_debug(node, FALSE);
 
     return node;
 }
