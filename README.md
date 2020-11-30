@@ -1,14 +1,14 @@
-<h1 align="center">
-  <br>
+<table align="center">
+<tr>
+  <td align="center" width="9999">
   <img src="./assets/kapraran-yapl-logo.png" alt="my-yapl" width="128">
-  <br>
-  my-yapl
-  <br>
-</h1>
 
-This is a complete compiler for a custom C-like programming language, created for educational purposes.
+  # my-yapl
+  </td>
+</tr>
+</table>
 
-The compiler exports assembly code for the MIX architecture and it can run on any available emulator that supports it.
+This is a complete compiler for a custom C-like programming language, created for educational purposes. It exports assembly code for the MIX architecture and it can run on any available emulator that supports it.
 
 Check the examples directory to take an idea of yapl's syntax or read [this document](https://github.com/pahihu/mixal/blob/master/MIX.DOC) to find more information about MIX.
 
