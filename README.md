@@ -1,4 +1,10 @@
-# my-yapl
+<h1 align="center">
+  <br>
+  <img src="./assets/kapraran-yapl-logo.png" alt="my-yapl" width="128">
+  <br>
+  my-yapl
+  <br>
+</h1>
 
 This is a complete compiler for a custom C-like programming language, created for educational purposes.
 

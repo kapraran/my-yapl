@@ -4,8 +4,8 @@ const path = require('path');
 const fs = require('fs');
 const execa = require('execa');
 const chalk = require('chalk');
-// const u = require('./res/utils');
-const ConstManager = require('./res/const-manager');
+// const u = require('./assets/res/utils');
+const ConstManager = require('./assets/res/const-manager');
 const app = require('commander');
 
 const pr = function(filename) {
@@ -84,7 +84,7 @@ const displayResult = function(name, started, res) {
 
 const editYTABH = function() {
     // load files
-    let template = fs.readFileSync(pr('./res/y.tab.h.tmpl'), 'utf8');
+    let template = fs.readFileSync(pr('./assets/res/y.tab.h.tmpl'), 'utf8');
     let ytabh = fs.readFileSync(pr('./y.tab.h'), 'utf8');
 
     // replace contents
@@ -154,7 +154,7 @@ function createVisualization(output) {
     });
 
     var src = fs.readFileSync(getInputFilename());
-    var tpl = fs.readFileSync('./res/ast.html.tmpl', 'utf8');
+    var tpl = fs.readFileSync('./assets/res/ast.html.tmpl', 'utf8');
     var rendered = tpl
         .replace('<!--__SOURCE_CODE__-->', src)                 // replace source code
         .replace('/**__NODES__**/0', JSON.stringify(nodes))     // replace nodes
