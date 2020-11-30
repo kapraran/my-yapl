@@ -18,7 +18,7 @@ const winBins = {
     mixBuilder: './bin/MIXBuilder.exe'
 }
 
-const cm = new ConstManager([pr('y.tab.h'), pr('utils.compiler.h')])
+const cm = new ConstManager([pr('src/y.tab.h'), pr('src/utils.compiler.h')])
 
 app
     .version('0.3.0')
@@ -98,8 +98,8 @@ const onYaccCompleted = function(started, res) {
     displayResult('yacc', started, res);
     editYTABH();
     cm.load();
-    
-    return execa(getCommand('flex'), ['yapl.compiler.l']);
+
+    return execa(getCommand('flex'), [pr('src/yapl.compiler.l')]);
 }
 
 const onFlexCompleted = function(started, res) {

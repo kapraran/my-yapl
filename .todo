@@ -1,9 +1,0 @@
-TODO:
-    ☐ check for overflow
-    ☐ remove methods after main
-
-Wishlist:
-    ☐ use stack for local variables
-
-Optimizations:
-    ☐ optmize push/pops
