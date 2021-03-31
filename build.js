@@ -13,8 +13,8 @@ const pr = function (filename) {
 };
 
 const winBins = {
-  flex: "./bin/win_flex.exe",
-  yacc: "./bin/win_bison.exe",
+  flex: "./bin/flex.exe",
+  yacc: "./bin/yacc.exe",
   mixBuilder: "./bin/MIXBuilder.exe",
 };
 
