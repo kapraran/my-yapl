@@ -21,3 +21,7 @@ desktop.ini
 /.vscode
 /node_modules
 yarn.lock
+
+# bin
+/bin/*
+!/bin/MixBuilder.exe
